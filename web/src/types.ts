@@ -10,7 +10,7 @@ export type Weekday =
 export type EffortLevel = 'easy' | 'medium' | 'heavy'
 
 export type DueStatus = 'overdue' | 'due-soon' | 'scheduled'
-export type TaskActionType = 'completed' | 'skipped' | 'snoozed'
+export type TaskActionType = 'completed' | 'skipped' | 'snoozed' | 'planned'
 
 export interface Chore {
   id: string

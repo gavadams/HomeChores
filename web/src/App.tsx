@@ -16,6 +16,7 @@ import {
   applyTaskAction,
   deactivateChore,
   deleteDayOverride,
+  fetchScheduleStatuses,
   fetchScoreWindows,
   loadUserData,
   persistSchedule,
@@ -125,6 +126,8 @@ function App() {
         setChoreDays(payload.choreDays.length > 0 ? payload.choreDays : fallbackChoreDays)
         const scorePayload = await fetchScoreWindows(user)
         setScores(scorePayload)
+        const statusMap = await fetchScheduleStatuses(user, daysFromNow(0))
+        setTaskStatus(statusMap)
         setStatus('Synced with Supabase.')
         setLoadedFromDb(true)
       } catch (error) {
@@ -141,14 +144,23 @@ function App() {
     const persist = async () => {
       try {
         await saveChoreDaysPreference(user, choreDays)
-        await persistSchedule(user, schedule, daysFromNow(0))
+        const nextSchedule = createSchedule({
+          chores,
+          choreDays,
+          dayCapacityOverrides: overrides,
+          horizonDays: 28,
+          fromDate: daysFromNow(0),
+        })
+        await persistSchedule(user, nextSchedule, daysFromNow(0))
+        const statusMap = await fetchScheduleStatuses(user, daysFromNow(0))
+        setTaskStatus(statusMap)
       } catch (error) {
         setStatus(`Failed to persist schedule: ${(error as Error).message}`)
       }
     }
 
     void persist()
-  }, [user, choreDays, schedule, loadedFromDb])
+  }, [user, loadedFromDb, chores, choreDays, overrides])
 
   const signIn = async () => {
     if (!authEmail || !authPassword) {
@@ -203,6 +215,7 @@ function App() {
       month3: { current: 0, previous: 0, delta: 0 },
       month6: { current: 0, previous: 0, delta: 0 },
     })
+    setTaskStatus({})
   }
 
   const toggleChoreDay = (day: Weekday) => {
@@ -301,7 +314,8 @@ function App() {
 
     try {
       await applyTaskAction(user, task, action)
-      setTaskStatus((current) => ({ ...current, [task.occurrenceId]: action }))
+      const statusMap = await fetchScheduleStatuses(user, daysFromNow(0))
+      setTaskStatus(statusMap)
       await reloadScores(user)
       setStatus(`Task marked as ${action}.`)
     } catch (error) {
@@ -513,23 +527,17 @@ function App() {
                       </small>
                       <small>Status: {taskStatus[task.occurrenceId] ?? 'planned'}</small>
                       <div className="button-row">
-                        <button
-                          onClick={() => void handleTaskAction(task, 'completed')}
-                          disabled={(taskStatus[task.occurrenceId] ?? 'planned') !== 'planned'}
-                        >
+                        <button onClick={() => void handleTaskAction(task, 'completed')}>
                           Complete
                         </button>
-                        <button
-                          onClick={() => void handleTaskAction(task, 'snoozed')}
-                          disabled={(taskStatus[task.occurrenceId] ?? 'planned') !== 'planned'}
-                        >
+                        <button onClick={() => void handleTaskAction(task, 'snoozed')}>
                           Snooze
                         </button>
-                        <button
-                          onClick={() => void handleTaskAction(task, 'skipped')}
-                          disabled={(taskStatus[task.occurrenceId] ?? 'planned') !== 'planned'}
-                        >
+                        <button onClick={() => void handleTaskAction(task, 'skipped')}>
                           Skip
+                        </button>
+                        <button onClick={() => void handleTaskAction(task, 'planned')}>
+                          Reset
                         </button>
                       </div>
                     </li>

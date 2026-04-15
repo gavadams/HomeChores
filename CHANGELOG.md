@@ -30,3 +30,8 @@ and this project uses semantic versioning.
 - Web app now runs in authenticated cloud mode when Supabase env vars are present.
 - Schedule reshuffle now syncs to database when chores/days/overrides change.
 - DB workflow now requires both incremental migration files and updates to the canonical full schema file.
+
+### Fixed
+- Regenerating the schedule no longer deletes and recreates rows that were already completed, skipped, or snoozed (those statuses now persist across reshuffles and reloads).
+- Recurring chores now emit every due occurrence within the planning window, so short intervals like daily tasks appear on each eligible chore day.
+- Task status can be updated again after the first action; changing or resetting status removes stale score rows for that scheduled chore before applying the new outcome.

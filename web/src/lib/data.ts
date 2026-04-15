@@ -180,6 +180,9 @@ export const saveChoreDaysPreference = async (
   if (error) throw error
 }
 
+const scheduleRowKey = (choreId: string, plannedFor: string, dueDate: string) =>
+  `${choreId}|${plannedFor}|${dueDate}`
+
 export const persistSchedule = async (
   user: User,
   schedule: ScheduleResult,
@@ -187,11 +190,29 @@ export const persistSchedule = async (
 ): Promise<void> => {
   if (!hasSupabaseEnv) return
 
+  const { data: existing, error: fetchError } = await supabase
+    .from('scheduled_chores')
+    .select('chore_id, planned_for, due_date, status')
+    .eq('user_id', user.id)
+    .gte('planned_for', fromDate)
+
+  if (fetchError) throw fetchError
+
+  const finalizedKeys = new Set<string>()
+  for (const row of existing ?? []) {
+    if (row.status !== 'planned') {
+      finalizedKeys.add(
+        scheduleRowKey(row.chore_id, row.planned_for, row.due_date),
+      )
+    }
+  }
+
   const { error: deleteError } = await supabase
     .from('scheduled_chores')
     .delete()
     .eq('user_id', user.id)
     .gte('planned_for', fromDate)
+    .eq('status', 'planned')
 
   if (deleteError) throw deleteError
 
@@ -199,15 +220,24 @@ export const persistSchedule = async (
     const totalMinutes = day.tasks.reduce((sum, task) => sum + task.estimateMinutes, 0)
     const pressure = pressureFromLoad(totalMinutes)
 
-    return day.tasks.map((task) => ({
-      user_id: user.id,
-      chore_id: task.choreId,
-      planned_for: day.date,
-      due_date: task.dueDate,
-      estimate_minutes: task.estimateMinutes,
-      pressure,
-      status: 'planned' as const,
-    }))
+    return day.tasks
+      .map((task) => {
+        const key = scheduleRowKey(task.choreId, day.date, task.dueDate)
+        if (finalizedKeys.has(key)) {
+          return null
+        }
+
+        return {
+          user_id: user.id,
+          chore_id: task.choreId,
+          planned_for: day.date,
+          due_date: task.dueDate,
+          estimate_minutes: task.estimateMinutes,
+          pressure,
+          status: 'planned' as const,
+        }
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null)
   })
 
   if (rows.length === 0) {
@@ -295,6 +325,34 @@ const scoreForCompletion = (dueStatus: DueStatus) => {
   return { points: 10, reason: 'completed_on_time' as const }
 }
 
+export const fetchScheduleStatuses = async (
+  user: User,
+  fromDate: string,
+): Promise<Record<string, TaskActionType | 'planned'>> => {
+  if (!hasSupabaseEnv) {
+    return {}
+  }
+
+  const { data, error } = await supabase
+    .from('scheduled_chores')
+    .select('chore_id, due_date, status')
+    .eq('user_id', user.id)
+    .gte('planned_for', fromDate)
+
+  if (error) throw error
+
+  const map: Record<string, TaskActionType | 'planned'> = {}
+  for (const row of data ?? []) {
+    const key = `${row.chore_id}:${row.due_date}`
+    const status = row.status as TaskActionType | 'planned'
+    if (map[key] === undefined || map[key] === 'planned') {
+      map[key] = status
+    }
+  }
+
+  return map
+}
+
 export const applyTaskAction = async (
   user: User,
   task: ScheduledTask,
@@ -317,9 +375,18 @@ export const applyTaskAction = async (
   if (!scheduled) {
     throw new Error('Scheduled chore row not found. Try refreshing.')
   }
-  if (scheduled.status !== 'planned') {
+
+  if (scheduled.status === actionType) {
     return
   }
+
+  const { error: scoreDeleteError } = await supabase
+    .from('score_events')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('scheduled_chore_id', scheduled.id)
+
+  if (scoreDeleteError) throw scoreDeleteError
 
   const { error: updateError } = await supabase
     .from('scheduled_chores')

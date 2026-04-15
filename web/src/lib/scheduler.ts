@@ -100,36 +100,44 @@ const expandOccurrences = (
   fromDate: string,
   horizonDays: number,
 ): PendingOccurrence[] => {
-  const horizonEnd = addDays(parseDate(fromDate), horizonDays - 1)
+  const startDate = parseDate(fromDate)
+  const horizonEnd = addDays(startDate, horizonDays - 1)
+  const occurrences: PendingOccurrence[] = []
 
-  return chores
-    .map<PendingOccurrence>((chore) => {
-      const anchor = chore.lastCompletedOn ?? chore.createdAt
-      const firstDue = addDays(parseDate(anchor), chore.recurrenceDays)
-      const dueDate = firstDue <= horizonEnd ? firstDue : horizonEnd
+  for (const chore of chores) {
+    const anchor = parseDate(chore.lastCompletedOn ?? chore.createdAt)
+    let due = addDays(anchor, chore.recurrenceDays)
 
-      return {
-        occurrenceId: `${chore.id}:${toIsoDate(dueDate)}`,
+    while (due < startDate) {
+      due = addDays(due, chore.recurrenceDays)
+    }
+
+    while (due <= horizonEnd) {
+      occurrences.push({
+        occurrenceId: `${chore.id}:${toIsoDate(due)}`,
         choreId: chore.id,
         name: chore.name,
         estimateMinutes: chore.estimateMinutes,
-        dueDate,
-        dueDateText: toIsoDate(dueDate),
+        dueDate: new Date(due),
+        dueDateText: toIsoDate(due),
         mustDoByDate: chore.mustDoByDate,
         createdAt: chore.createdAt,
-      }
-    })
-    .sort((left, right) => {
-      const dueDiff = left.dueDate.getTime() - right.dueDate.getTime()
-      if (dueDiff !== 0) return dueDiff
+      })
+      due = addDays(due, chore.recurrenceDays)
+    }
+  }
 
-      const mustDoByLeft = left.mustDoByDate ?? '9999-12-31'
-      const mustDoByRight = right.mustDoByDate ?? '9999-12-31'
-      const mustDiff = mustDoByLeft.localeCompare(mustDoByRight)
-      if (mustDiff !== 0) return mustDiff
+  return occurrences.sort((left, right) => {
+    const dueDiff = left.dueDate.getTime() - right.dueDate.getTime()
+    if (dueDiff !== 0) return dueDiff
 
-      return left.createdAt.localeCompare(right.createdAt)
-    })
+    const mustDoByLeft = left.mustDoByDate ?? '9999-12-31'
+    const mustDoByRight = right.mustDoByDate ?? '9999-12-31'
+    const mustDiff = mustDoByLeft.localeCompare(mustDoByRight)
+    if (mustDiff !== 0) return mustDiff
+
+    return left.createdAt.localeCompare(right.createdAt)
+  })
 }
 
 const canFitCapacity = (
