@@ -94,8 +94,18 @@ button {
 
 .button-row {
   display: flex;
-  gap: 0.5rem;
+  flex-wrap: wrap;
+  gap: 0.4rem;
   margin-top: 0.5rem;
+  width: 100%;
+  align-items: stretch;
+}
+
+.button-row button {
+  flex: 1 1 calc(50% - 0.2rem);
+  min-width: 5.5rem;
+  box-sizing: border-box;
+  white-space: nowrap;
 }
 
 .status-line {
@@ -137,6 +147,11 @@ button {
   border: 1px solid #d8dbe2;
   border-radius: 8px;
   padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.25rem;
+  min-width: 0;
 }
 
 .schedule-day small {

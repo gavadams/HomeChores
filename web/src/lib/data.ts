@@ -341,11 +341,21 @@ export const fetchScheduleStatuses = async (
 
   if (error) throw error
 
+  const statusPriority: Record<string, number> = {
+    planned: 0,
+    snoozed: 1,
+    skipped: 2,
+    completed: 3,
+  }
+
+  const rank = (value: TaskActionType | 'planned') => statusPriority[value] ?? 0
+
   const map: Record<string, TaskActionType | 'planned'> = {}
   for (const row of data ?? []) {
     const key = `${row.chore_id}:${row.due_date}`
     const status = row.status as TaskActionType | 'planned'
-    if (map[key] === undefined || map[key] === 'planned') {
+    const prev = map[key]
+    if (prev === undefined || rank(status) > rank(prev)) {
       map[key] = status
     }
   }
@@ -360,54 +370,56 @@ export const applyTaskAction = async (
 ): Promise<void> => {
   if (!hasSupabaseEnv) return
 
-  const { data: scheduled, error: scheduledError } = await supabase
+  const { data: rows, error: scheduledError } = await supabase
     .from('scheduled_chores')
     .select('id,status')
     .eq('user_id', user.id)
     .eq('chore_id', task.choreId)
     .eq('planned_for', task.date)
     .eq('due_date', task.dueDate)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
 
   if (scheduledError) throw scheduledError
-  if (!scheduled) {
+  if (!rows?.length) {
     throw new Error('Scheduled chore row not found. Try refreshing.')
   }
 
-  if (scheduled.status === actionType) {
+  if (rows.every((row) => row.status === actionType)) {
     return
   }
+
+  const ids = rows.map((row) => row.id)
 
   const { error: scoreDeleteError } = await supabase
     .from('score_events')
     .delete()
     .eq('user_id', user.id)
-    .eq('scheduled_chore_id', scheduled.id)
+    .in('scheduled_chore_id', ids)
 
   if (scoreDeleteError) throw scoreDeleteError
 
   const { error: updateError } = await supabase
     .from('scheduled_chores')
     .update({ status: actionType })
-    .eq('id', scheduled.id)
+    .in('id', ids)
     .eq('user_id', user.id)
 
   if (updateError) throw updateError
 
-  const { error: actionLogError } = await supabase.from('schedule_action_log').insert({
+  const logRows = ids.map((id) => ({
     user_id: user.id,
-    scheduled_chore_id: scheduled.id,
+    scheduled_chore_id: id,
     action_type: actionType,
-  })
+  }))
+  const { error: actionLogError } = await supabase.from('schedule_action_log').insert(logRows)
   if (actionLogError) throw actionLogError
+
+  const primaryScheduledId = ids[0]
 
   if (actionType === 'completed') {
     const scoring = scoreForCompletion(task.dueStatus)
     const { error: scoreError } = await supabase.from('score_events').insert({
       user_id: user.id,
-      scheduled_chore_id: scheduled.id,
+      scheduled_chore_id: primaryScheduledId,
       points: scoring.points,
       reason: scoring.reason,
     })
@@ -417,7 +429,7 @@ export const applyTaskAction = async (
   if (actionType === 'skipped') {
     const { error: scoreError } = await supabase.from('score_events').insert({
       user_id: user.id,
-      scheduled_chore_id: scheduled.id,
+      scheduled_chore_id: primaryScheduledId,
       points: 0,
       reason: 'skipped',
     })

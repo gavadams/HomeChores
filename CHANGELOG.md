@@ -35,3 +35,7 @@ and this project uses semantic versioning.
 - Regenerating the schedule no longer deletes and recreates rows that were already completed, skipped, or snoozed (those statuses now persist across reshuffles and reloads).
 - Recurring chores now emit every due occurrence within the planning window, so short intervals like daily tasks appear on each eligible chore day.
 - Task status can be updated again after the first action; changing or resetting status removes stale score rows for that scheduled chore before applying the new outcome.
+- Scheduler enforces at most one instance of the same chore per calendar day (prevents stacked duplicates and inflated minute totals).
+- Task actions now update every matching `scheduled_chores` row for the same slot and delete score events for all of them before re-scoring, so downgrades correctly reduce totals when legacy duplicates existed.
+- Schedule card layout uses wrapped action buttons so labels no longer overlap across columns.
+- Day “minutes planned” header counts only tasks still in `planned` status (completed/snoozed/skipped minutes are excluded).

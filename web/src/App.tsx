@@ -330,7 +330,13 @@ function App() {
   }
 
   const dayLoad = (tasks: ScheduledTask[]) =>
-    tasks.reduce((sum, entry) => sum + entry.estimateMinutes, 0)
+    tasks.reduce((sum, entry) => {
+      const st = taskStatus[entry.occurrenceId] ?? 'planned'
+      if (st !== 'planned') {
+        return sum
+      }
+      return sum + entry.estimateMinutes
+    }, 0)
 
   const scoreDeltaLabel = (delta: number) => {
     if (delta > 0) return `+${delta} vs previous period`

@@ -196,6 +196,11 @@ export const createSchedule = ({
     let placed = false
 
     for (const { day, index } of preferredDays) {
+      const choreAlreadyOnDay = day.tasks.some((task) => task.choreId === occurrence.choreId)
+      if (choreAlreadyOnDay) {
+        continue
+      }
+
       const load = day.tasks.reduce((sum, task) => sum + task.estimateMinutes, 0)
       const isOverdueChore = occurrence.dueDate < startDate
 
