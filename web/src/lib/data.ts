@@ -1,0 +1,258 @@
+import type { User } from '@supabase/supabase-js'
+import type { Chore, DayCapacityOverride, ScheduleResult, Weekday } from '../types'
+import { hasSupabaseEnv, supabase } from './supabase'
+
+const weekdayToNumber: Record<Weekday, number> = {
+  Monday: 1,
+  Tuesday: 2,
+  Wednesday: 3,
+  Thursday: 4,
+  Friday: 5,
+  Saturday: 6,
+  Sunday: 7,
+}
+
+const numberToWeekday: Record<number, Weekday> = {
+  1: 'Monday',
+  2: 'Tuesday',
+  3: 'Wednesday',
+  4: 'Thursday',
+  5: 'Friday',
+  6: 'Saturday',
+  7: 'Sunday',
+}
+
+const pressureFromLoad = (minutes: number): 'light' | 'medium' | 'heavy' => {
+  if (minutes >= 120) return 'heavy'
+  if (minutes >= 60) return 'medium'
+  return 'light'
+}
+
+export const loadUserData = async (user: User): Promise<{
+  chores: Chore[]
+  overrides: DayCapacityOverride[]
+  choreDays: Weekday[]
+}> => {
+  if (!hasSupabaseEnv) {
+    return { chores: [], overrides: [], choreDays: ['Monday', 'Wednesday', 'Friday'] }
+  }
+
+  const [choresResult, overridesResult, preferencesResult] = await Promise.all([
+    supabase
+      .from('chores')
+      .select(
+        'id,name,estimate_minutes,recurrence_days,created_at,last_completed_on,must_do_by_date,effort',
+      )
+      .eq('user_id', user.id)
+      .eq('active', true)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('day_capacity_overrides')
+      .select('override_date,limit_minutes,reason')
+      .eq('user_id', user.id)
+      .order('override_date', { ascending: true }),
+    supabase
+      .from('user_preferences')
+      .select('chore_days')
+      .eq('user_id', user.id)
+      .maybeSingle(),
+  ])
+
+  if (choresResult.error) throw choresResult.error
+  if (overridesResult.error) throw overridesResult.error
+  if (preferencesResult.error) throw preferencesResult.error
+
+  const chores: Chore[] = (choresResult.data ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    estimateMinutes: row.estimate_minutes,
+    recurrenceDays: row.recurrence_days,
+    createdAt: row.created_at.slice(0, 10),
+    lastCompletedOn: row.last_completed_on ?? undefined,
+    mustDoByDate: row.must_do_by_date ?? undefined,
+    effort: row.effort,
+  }))
+
+  const overrides: DayCapacityOverride[] = (overridesResult.data ?? []).map((row) => ({
+    date: row.override_date,
+    limitMinutes: row.limit_minutes,
+    reason: row.reason ?? undefined,
+  }))
+
+  const rawDays: number[] =
+    (preferencesResult.data?.chore_days as number[] | null) ?? [1, 3, 5]
+  const choreDays = rawDays
+    .map((value: number) => numberToWeekday[value])
+    .filter((value): value is Weekday => Boolean(value))
+
+  return { chores, overrides, choreDays }
+}
+
+export const saveChore = async (user: User, chore: Chore): Promise<void> => {
+  if (!hasSupabaseEnv) return
+
+  const { error } = await supabase.from('chores').upsert(
+    {
+      id: chore.id,
+      user_id: user.id,
+      name: chore.name,
+      estimate_minutes: chore.estimateMinutes,
+      recurrence_days: chore.recurrenceDays,
+      effort: chore.effort,
+      last_completed_on: chore.lastCompletedOn ?? null,
+      must_do_by_date: chore.mustDoByDate ?? null,
+      created_at: chore.createdAt,
+      active: true,
+    },
+    { onConflict: 'id' },
+  )
+
+  if (error) throw error
+}
+
+export const deactivateChore = async (user: User, choreId: string): Promise<void> => {
+  if (!hasSupabaseEnv) return
+
+  const { error } = await supabase
+    .from('chores')
+    .update({ active: false })
+    .eq('id', choreId)
+    .eq('user_id', user.id)
+
+  if (error) throw error
+}
+
+export const saveDayOverride = async (
+  user: User,
+  override: DayCapacityOverride,
+): Promise<void> => {
+  if (!hasSupabaseEnv) return
+
+  const { error } = await supabase.from('day_capacity_overrides').upsert(
+    {
+      user_id: user.id,
+      override_date: override.date,
+      limit_minutes: override.limitMinutes,
+      reason: override.reason ?? null,
+    },
+    { onConflict: 'user_id,override_date' },
+  )
+
+  if (error) throw error
+}
+
+export const deleteDayOverride = async (user: User, date: string): Promise<void> => {
+  if (!hasSupabaseEnv) return
+
+  const { error } = await supabase
+    .from('day_capacity_overrides')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('override_date', date)
+
+  if (error) throw error
+}
+
+export const saveChoreDaysPreference = async (
+  user: User,
+  choreDays: Weekday[],
+): Promise<void> => {
+  if (!hasSupabaseEnv) return
+
+  const dayNumbers = choreDays.map((day) => weekdayToNumber[day]).sort((a, b) => a - b)
+  const { error } = await supabase.from('user_preferences').upsert(
+    {
+      user_id: user.id,
+      chore_days: dayNumbers,
+    },
+    { onConflict: 'user_id' },
+  )
+
+  if (error) throw error
+}
+
+export const persistSchedule = async (
+  user: User,
+  schedule: ScheduleResult,
+  fromDate: string,
+): Promise<void> => {
+  if (!hasSupabaseEnv) return
+
+  const { error: deleteError } = await supabase
+    .from('scheduled_chores')
+    .delete()
+    .eq('user_id', user.id)
+    .gte('planned_for', fromDate)
+
+  if (deleteError) throw deleteError
+
+  const rows = schedule.days.flatMap((day) => {
+    const totalMinutes = day.tasks.reduce((sum, task) => sum + task.estimateMinutes, 0)
+    const pressure = pressureFromLoad(totalMinutes)
+
+    return day.tasks.map((task) => ({
+      user_id: user.id,
+      chore_id: task.choreId,
+      planned_for: day.date,
+      due_date: task.dueDate,
+      estimate_minutes: task.estimateMinutes,
+      pressure,
+      status: 'planned' as const,
+    }))
+  })
+
+  if (rows.length === 0) {
+    return
+  }
+
+  const { error: insertError } = await supabase.from('scheduled_chores').insert(rows)
+  if (insertError) throw insertError
+}
+
+const getPeriodStart = (months: number): string => {
+  const date = new Date()
+  date.setMonth(date.getMonth() - months)
+  date.setHours(0, 0, 0, 0)
+  return date.toISOString()
+}
+
+export const fetchScoreWindows = async (user: User): Promise<{
+  month1: number
+  month3: number
+  month6: number
+}> => {
+  if (!hasSupabaseEnv) {
+    return { month1: 0, month3: 0, month6: 0 }
+  }
+
+  const [m1, m3, m6] = await Promise.all([
+    supabase
+      .from('score_events')
+      .select('points')
+      .eq('user_id', user.id)
+      .gte('created_at', getPeriodStart(1)),
+    supabase
+      .from('score_events')
+      .select('points')
+      .eq('user_id', user.id)
+      .gte('created_at', getPeriodStart(3)),
+    supabase
+      .from('score_events')
+      .select('points')
+      .eq('user_id', user.id)
+      .gte('created_at', getPeriodStart(6)),
+  ])
+
+  if (m1.error) throw m1.error
+  if (m3.error) throw m3.error
+  if (m6.error) throw m6.error
+
+  const sumPoints = (rows: Array<{ points: number }> | null) =>
+    (rows ?? []).reduce((sum, entry) => sum + entry.points, 0)
+
+  return {
+    month1: sumPoints(m1.data),
+    month3: sumPoints(m3.data),
+    month6: sumPoints(m6.data),
+  }
+}

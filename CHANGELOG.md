@@ -20,3 +20,11 @@ and this project uses semantic versioning.
   - one-off capacity-aware placement
 - Supabase initial SQL migration with core tables and RLS policies.
 - Project-level changelog and migration-first discipline baseline.
+- Supabase auth flow in web app (sign in, sign up, sign out).
+- Supabase data layer for chores, one-off day overrides, and user chore-day preferences.
+- Automatic persistence of regenerated schedules into `scheduled_chores`.
+- Score window loading from `score_events` for 1/3/6 month views.
+
+### Changed
+- Web app now runs in authenticated cloud mode when Supabase env vars are present.
+- Schedule reshuffle now syncs to database when chores/days/overrides change.

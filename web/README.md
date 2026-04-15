@@ -17,10 +17,12 @@ Frontend for chore planning, schedule reshuffling, and score trend tracking.
 - Add recurring chores
 - One-off date capacity overrides
 - Schedule preview for next 4 weeks
-- Score summary cards for 1/3/6 month periods
+- Supabase auth (email/password)
+- Supabase persistence for chores, day limits, and chore-day preferences
+- Score summary cards for 1/3/6 month periods (loaded from `score_events`)
 
 ## Next Implementation Targets
 
-- Connect chore CRUD to Supabase tables
-- Add auth flow with Supabase Auth
-- Persist score events and period comparisons
+- Completion actions (`complete`, `skip`, `snooze`) with score event writes
+- Trend comparisons versus previous equivalent period
+- Notification delivery integration

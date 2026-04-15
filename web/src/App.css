@@ -89,6 +89,18 @@ button {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.5rem;
+}
+
+.button-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.status-line {
+  margin-top: 0.5rem;
+  color: #4f5768;
 }
 
 .schedule-grid {
