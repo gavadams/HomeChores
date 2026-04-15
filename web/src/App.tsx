@@ -6,11 +6,14 @@ import type {
   DayCapacityOverride,
   DueStatus,
   ScheduledTask,
+  ScoreSummary,
+  TaskActionType,
   Weekday,
 } from './types'
 import { createSchedule } from './lib/scheduler'
 import { hasSupabaseEnv, supabase } from './lib/supabase'
 import {
+  applyTaskAction,
   deactivateChore,
   deleteDayOverride,
   fetchScoreWindows,
@@ -64,7 +67,12 @@ function App() {
   const [newChoreFrequency, setNewChoreFrequency] = useState(7)
   const [newCapacityDate, setNewCapacityDate] = useState(daysFromNow(7))
   const [newCapacityMinutes, setNewCapacityMinutes] = useState(30)
-  const [scores, setScores] = useState({ month1: 0, month3: 0, month6: 0 })
+  const [scores, setScores] = useState<ScoreSummary>({
+    month1: { current: 0, previous: 0, delta: 0 },
+    month3: { current: 0, previous: 0, delta: 0 },
+    month6: { current: 0, previous: 0, delta: 0 },
+  })
+  const [taskStatus, setTaskStatus] = useState<Record<string, TaskActionType | 'planned'>>({})
 
   const schedule = useMemo(
     () =>
@@ -190,7 +198,11 @@ function App() {
     setChores([])
     setOverrides([])
     setChoreDays(fallbackChoreDays)
-    setScores({ month1: 0, month3: 0, month6: 0 })
+    setScores({
+      month1: { current: 0, previous: 0, delta: 0 },
+      month3: { current: 0, previous: 0, delta: 0 },
+      month6: { current: 0, previous: 0, delta: 0 },
+    })
   }
 
   const toggleChoreDay = (day: Weekday) => {
@@ -275,6 +287,28 @@ function App() {
     }
   }
 
+  const reloadScores = async (targetUser: User) => {
+    try {
+      const scorePayload = await fetchScoreWindows(targetUser)
+      setScores(scorePayload)
+    } catch (error) {
+      setStatus(`Failed loading score trend: ${(error as Error).message}`)
+    }
+  }
+
+  const handleTaskAction = async (task: ScheduledTask, action: TaskActionType) => {
+    if (!user) return
+
+    try {
+      await applyTaskAction(user, task, action)
+      setTaskStatus((current) => ({ ...current, [task.occurrenceId]: action }))
+      await reloadScores(user)
+      setStatus(`Task marked as ${action}.`)
+    } catch (error) {
+      setStatus(`Failed task action: ${(error as Error).message}`)
+    }
+  }
+
   const dueLabel = (status: DueStatus) => {
     if (status === 'overdue') return 'Overdue'
     if (status === 'due-soon') return 'Due soon'
@@ -283,6 +317,12 @@ function App() {
 
   const dayLoad = (tasks: ScheduledTask[]) =>
     tasks.reduce((sum, entry) => sum + entry.estimateMinutes, 0)
+
+  const scoreDeltaLabel = (delta: number) => {
+    if (delta > 0) return `+${delta} vs previous period`
+    if (delta < 0) return `${delta} vs previous period`
+    return 'No change vs previous period'
+  }
 
   if (!hasSupabaseEnv) {
     return (
@@ -471,6 +511,27 @@ function App() {
                       <small>
                         {task.estimateMinutes} min - {dueLabel(task.dueStatus)}
                       </small>
+                      <small>Status: {taskStatus[task.occurrenceId] ?? 'planned'}</small>
+                      <div className="button-row">
+                        <button
+                          onClick={() => void handleTaskAction(task, 'completed')}
+                          disabled={(taskStatus[task.occurrenceId] ?? 'planned') !== 'planned'}
+                        >
+                          Complete
+                        </button>
+                        <button
+                          onClick={() => void handleTaskAction(task, 'snoozed')}
+                          disabled={(taskStatus[task.occurrenceId] ?? 'planned') !== 'planned'}
+                        >
+                          Snooze
+                        </button>
+                        <button
+                          onClick={() => void handleTaskAction(task, 'skipped')}
+                          disabled={(taskStatus[task.occurrenceId] ?? 'planned') !== 'planned'}
+                        >
+                          Skip
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -485,15 +546,18 @@ function App() {
         <div className="score-grid">
           <article>
             <h3>Last 1 month</h3>
-            <p>{scores.month1} pts</p>
+            <p>{scores.month1.current} pts</p>
+            <small>{scoreDeltaLabel(scores.month1.delta)}</small>
           </article>
           <article>
             <h3>Last 3 months</h3>
-            <p>{scores.month3} pts</p>
+            <p>{scores.month3.current} pts</p>
+            <small>{scoreDeltaLabel(scores.month3.delta)}</small>
           </article>
           <article>
             <h3>Last 6 months</h3>
-            <p>{scores.month6} pts</p>
+            <p>{scores.month6.current} pts</p>
+            <small>{scoreDeltaLabel(scores.month6.delta)}</small>
           </article>
         </div>
       </section>

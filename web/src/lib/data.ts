@@ -1,5 +1,14 @@
 import type { User } from '@supabase/supabase-js'
-import type { Chore, DayCapacityOverride, ScheduleResult, Weekday } from '../types'
+import type {
+  Chore,
+  DayCapacityOverride,
+  DueStatus,
+  ScheduleResult,
+  ScheduledTask,
+  ScoreSummary,
+  TaskActionType,
+  Weekday,
+} from '../types'
 import { hasSupabaseEnv, supabase } from './supabase'
 
 const weekdayToNumber: Record<Weekday, number> = {
@@ -209,50 +218,142 @@ export const persistSchedule = async (
   if (insertError) throw insertError
 }
 
-const getPeriodStart = (months: number): string => {
-  const date = new Date()
-  date.setMonth(date.getMonth() - months)
-  date.setHours(0, 0, 0, 0)
-  return date.toISOString()
+const addMonths = (date: Date, amount: number): Date => {
+  const next = new Date(date)
+  next.setMonth(next.getMonth() + amount)
+  return next
 }
 
-export const fetchScoreWindows = async (user: User): Promise<{
-  month1: number
-  month3: number
-  month6: number
-}> => {
-  if (!hasSupabaseEnv) {
-    return { month1: 0, month3: 0, month6: 0 }
-  }
+const toIsoDateTime = (date: Date): string => date.toISOString()
 
-  const [m1, m3, m6] = await Promise.all([
-    supabase
-      .from('score_events')
-      .select('points')
-      .eq('user_id', user.id)
-      .gte('created_at', getPeriodStart(1)),
-    supabase
-      .from('score_events')
-      .select('points')
-      .eq('user_id', user.id)
-      .gte('created_at', getPeriodStart(3)),
-    supabase
-      .from('score_events')
-      .select('points')
-      .eq('user_id', user.id)
-      .gte('created_at', getPeriodStart(6)),
+const getRange = (months: number) => {
+  const now = new Date()
+  const currentStart = addMonths(now, -months)
+  const previousStart = addMonths(currentStart, -months)
+  return {
+    currentStart: toIsoDateTime(currentStart),
+    currentEnd: toIsoDateTime(now),
+    previousStart: toIsoDateTime(previousStart),
+    previousEnd: toIsoDateTime(currentStart),
+  }
+}
+
+const sumPoints = (rows: Array<{ points: number }> | null) =>
+  (rows ?? []).reduce((sum, entry) => sum + entry.points, 0)
+
+const queryRangePoints = async (
+  userId: string,
+  start: string,
+  end: string,
+): Promise<number> => {
+  const { data, error } = await supabase
+    .from('score_events')
+    .select('points')
+    .eq('user_id', userId)
+    .gte('created_at', start)
+    .lt('created_at', end)
+
+  if (error) throw error
+  return sumPoints(data)
+}
+
+const fetchWindow = async (userId: string, months: number) => {
+  const range = getRange(months)
+  const [current, previous] = await Promise.all([
+    queryRangePoints(userId, range.currentStart, range.currentEnd),
+    queryRangePoints(userId, range.previousStart, range.previousEnd),
   ])
 
-  if (m1.error) throw m1.error
-  if (m3.error) throw m3.error
-  if (m6.error) throw m6.error
+  return {
+    current,
+    previous,
+    delta: current - previous,
+  }
+}
 
-  const sumPoints = (rows: Array<{ points: number }> | null) =>
-    (rows ?? []).reduce((sum, entry) => sum + entry.points, 0)
+export const fetchScoreWindows = async (user: User): Promise<ScoreSummary> => {
+  if (!hasSupabaseEnv) {
+    return {
+      month1: { current: 0, previous: 0, delta: 0 },
+      month3: { current: 0, previous: 0, delta: 0 },
+      month6: { current: 0, previous: 0, delta: 0 },
+    }
+  }
 
   return {
-    month1: sumPoints(m1.data),
-    month3: sumPoints(m3.data),
-    month6: sumPoints(m6.data),
+    month1: await fetchWindow(user.id, 1),
+    month3: await fetchWindow(user.id, 3),
+    month6: await fetchWindow(user.id, 6),
+  }
+}
+
+const scoreForCompletion = (dueStatus: DueStatus) => {
+  if (dueStatus === 'overdue') {
+    return { points: 6, reason: 'completed_late' as const }
+  }
+
+  return { points: 10, reason: 'completed_on_time' as const }
+}
+
+export const applyTaskAction = async (
+  user: User,
+  task: ScheduledTask,
+  actionType: TaskActionType,
+): Promise<void> => {
+  if (!hasSupabaseEnv) return
+
+  const { data: scheduled, error: scheduledError } = await supabase
+    .from('scheduled_chores')
+    .select('id,status')
+    .eq('user_id', user.id)
+    .eq('chore_id', task.choreId)
+    .eq('planned_for', task.date)
+    .eq('due_date', task.dueDate)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (scheduledError) throw scheduledError
+  if (!scheduled) {
+    throw new Error('Scheduled chore row not found. Try refreshing.')
+  }
+  if (scheduled.status !== 'planned') {
+    return
+  }
+
+  const { error: updateError } = await supabase
+    .from('scheduled_chores')
+    .update({ status: actionType })
+    .eq('id', scheduled.id)
+    .eq('user_id', user.id)
+
+  if (updateError) throw updateError
+
+  const { error: actionLogError } = await supabase.from('schedule_action_log').insert({
+    user_id: user.id,
+    scheduled_chore_id: scheduled.id,
+    action_type: actionType,
+  })
+  if (actionLogError) throw actionLogError
+
+  if (actionType === 'completed') {
+    const scoring = scoreForCompletion(task.dueStatus)
+    const { error: scoreError } = await supabase.from('score_events').insert({
+      user_id: user.id,
+      scheduled_chore_id: scheduled.id,
+      points: scoring.points,
+      reason: scoring.reason,
+    })
+    if (scoreError) throw scoreError
+  }
+
+  if (actionType === 'skipped') {
+    const { error: scoreError } = await supabase.from('score_events').insert({
+      user_id: user.id,
+      scheduled_chore_id: scheduled.id,
+      points: 0,
+      reason: 'skipped',
+    })
+    if (scoreError) throw scoreError
   }
 }

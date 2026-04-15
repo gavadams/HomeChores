@@ -19,10 +19,11 @@ Frontend for chore planning, schedule reshuffling, and score trend tracking.
 - Schedule preview for next 4 weeks
 - Supabase auth (email/password)
 - Supabase persistence for chores, day limits, and chore-day preferences
-- Score summary cards for 1/3/6 month periods (loaded from `score_events`)
+- Completion actions on scheduled tasks (`complete`, `snooze`, `skip`)
+- Score summary cards for 1/3/6 month periods (current + delta vs previous)
 
 ## Next Implementation Targets
 
-- Completion actions (`complete`, `skip`, `snooze`) with score event writes
-- Trend comparisons versus previous equivalent period
+- Weekly review summary page (completed vs planned, score movement, skipped/snoozed counts)
 - Notification delivery integration
+- Optional edit flows for existing chores (name/minutes/frequency/must-do date)

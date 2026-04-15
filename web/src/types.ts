@@ -10,6 +10,7 @@ export type Weekday =
 export type EffortLevel = 'easy' | 'medium' | 'heavy'
 
 export type DueStatus = 'overdue' | 'due-soon' | 'scheduled'
+export type TaskActionType = 'completed' | 'skipped' | 'snoozed'
 
 export interface Chore {
   id: string
@@ -36,6 +37,18 @@ export interface ScheduledTask {
   estimateMinutes: number
   dueDate: string
   dueStatus: DueStatus
+}
+
+export interface ScoreWindowSummary {
+  current: number
+  previous: number
+  delta: number
+}
+
+export interface ScoreSummary {
+  month1: ScoreWindowSummary
+  month3: ScoreWindowSummary
+  month6: ScoreWindowSummary
 }
 
 export interface ScheduleDay {

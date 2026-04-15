@@ -24,7 +24,9 @@ and this project uses semantic versioning.
 - Supabase data layer for chores, one-off day overrides, and user chore-day preferences.
 - Automatic persistence of regenerated schedules into `scheduled_chores`.
 - Score window loading from `score_events` for 1/3/6 month views.
+- Canonical full schema file at `supabase/complete_project_database_schema.sql` for single-file fresh DB rebuilds.
 
 ### Changed
 - Web app now runs in authenticated cloud mode when Supabase env vars are present.
 - Schedule reshuffle now syncs to database when chores/days/overrides change.
+- DB workflow now requires both incremental migration files and updates to the canonical full schema file.

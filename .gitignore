@@ -24,13 +24,15 @@ dist-ssr
 *.sw?
 
 # Supabase
-supabase/migrations/
+supabase\migrations
+supabase/
 supabase/seed.sql
 supabase/seed.sql.gz
 supabase/seed.sql.gz.part
 supabase/seed.sql.gz.part.1
 supabase/seed.sql.gz.part.2
 supabase/seed.sql.gz.part.3
+
 # Environment variables
 .env
 .env.local
@@ -40,3 +42,9 @@ supabase/seed.sql.gz.part.3
 .env.development
 .env.test
 .env.production
+
+#Other
+/web/README.md
+/web/CHANGELOG.md
+CHANGELOG.md
+README.md
