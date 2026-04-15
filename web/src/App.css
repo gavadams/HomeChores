@@ -1,0 +1,148 @@
+.app-shell {
+  width: min(1100px, 100%);
+  margin: 0 auto;
+  padding: 2rem 1rem 4rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 2rem;
+}
+
+.app-header p {
+  margin: 0.5rem 0 0;
+}
+
+.panel {
+  border: 1px solid #d8dbe2;
+  border-radius: 12px;
+  padding: 1rem;
+  background: #fff;
+}
+
+.panel h2 {
+  margin-top: 0;
+}
+
+.panel-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+.weekday-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.5rem;
+}
+
+.weekday-toggle {
+  border: 1px solid #d8dbe2;
+  border-radius: 10px;
+  padding: 0.5rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.field {
+  margin-bottom: 0.75rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.field label {
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.field input {
+  height: 2rem;
+  border: 1px solid #ced3dd;
+  border-radius: 8px;
+  padding: 0 0.6rem;
+}
+
+button {
+  border: 1px solid #295ddb;
+  background: #295ddb;
+  color: #fff;
+  border-radius: 8px;
+  height: 2rem;
+  padding: 0 0.75rem;
+}
+
+.simple-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.simple-list li {
+  border: 1px solid #d8dbe2;
+  border-radius: 8px;
+  padding: 0.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.schedule-day {
+  border: 1px solid #d8dbe2;
+  border-radius: 10px;
+  padding: 0.75rem;
+}
+
+.schedule-day h3 {
+  margin: 0;
+}
+
+.schedule-day p {
+  margin: 0.25rem 0 0.5rem;
+  font-size: 0.9rem;
+  color: #4f5768;
+}
+
+.schedule-day ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.schedule-day li {
+  border: 1px solid #d8dbe2;
+  border-radius: 8px;
+  padding: 0.5rem;
+}
+
+.schedule-day small {
+  color: #4f5768;
+}
+
+.empty-state {
+  color: #4f5768;
+}
+
+.score-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.score-grid article {
+  border: 1px solid #d8dbe2;
+  border-radius: 10px;
+  padding: 0.75rem;
+}
